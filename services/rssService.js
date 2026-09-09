@@ -170,11 +170,12 @@ async function fetchAllFeeds({ maxPerFeed = 6, useAi = true } = {}) {
     if (useAi) {
       synthesis = await ai.synthesizeMultiSourceArticle(cluster);
     } else {
+      const combinedText = cluster.map(c => c.title + ' ' + c.content).join(' ');
       synthesis = {
         ai_title: primary.title,
         ai_content: primary.content,
         ai_summary: primary.content.slice(0, 150) + '...',
-        category: 'Piețe & Burse',
+        category: ai.detectFinancialCategory(combinedText),
         tickers: '',
         sources_json: cluster.map(c => ({ name: c.sourceName, title: c.title, link: c.link }))
       };
