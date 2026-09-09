@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Panou Administrare | ȘtiriHub AI</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22%20width=%22100%22%20height=%22100%22><text y=%22.9em%22 font-size=%2290%22>⚙️</text></svg>">
+</head>
+<body>
+
+  <header class="site-header">
+    <div class="nav-container">
+      <a href="/" class="logo">
+        Știri<span>Hub</span>
+        <span class="logo-badge">Panou Control</span>
+      </a>
+      <div class="header-actions">
+        <a href="/" class="btn btn-outline">⬅️ Înapoi la Portal</a>
+        <button id="adminFetchBtn" class="btn btn-accent">
+          🚀 Declanșează Scanare Acum
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    
+    <!-- Statistici -->
+    <div class="admin-grid">
+      <div class="stat-card">
+        <div class="stat-icon">📰</div>
+        <div class="stat-info">
+          <h3 id="statTotalArticles">0</h3>
+          <p>Știri Colectate</p>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">📡</div>
+        <div class="stat-info">
+          <h3 id="statTotalSources">0</h3>
+          <p>Surse RSS Active</p>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">📤</div>
+        <div class="stat-info">
+          <h3 id="statWpSynced">0</h3>
+          <p>Sincronizate pe WordPress</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Status Scanare -->
+    <div id="scanStatusBox" style="display:none; margin-bottom: 25px; padding: 20px; border-radius: var(--radius); background: #eff6ff; border: 1px solid #bfdbfe;">
+      <h3 style="color: #1e40af; margin-bottom: 5px;">⏳ Scanare în curs...</h3>
+      <p style="color: #1e3a8a; font-size: 0.9rem;">Sistemul citește fluxurile RSS, extrage articolele noi și le reformulează cu AI. Vă rugăm să așteptați câteva momente.</p>
+    </div>
+
+    <!-- 1. Configurare AI -->
+    <section class="admin-section">
+      <h2>🤖 Setări Inteligență Artificială (Google Gemini)</h2>
+      <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 15px;">
+        AI-ul rescrie conținutul pentru a evita duplicarea textului și pentru a sintetiza informația într-un mod jurnalistic clar.
+      </p>
+
+      <form id="aiSettingsForm">
+        <div class="form-group">
+          <label for="geminiApiKey">Cheie Gemini API:</label>
+          <input type="password" id="geminiApiKey" placeholder="AIzaSy...">
+          <small>
+            Poți obține o cheie gratuită de pe 
+            <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" style="color: var(--primary); font-weight: 600;">Google AI Studio</a>.
+            (Dacă lași liber, aplicația funcționează în modul de simulare/demo).
+          </small>
+        </div>
+
+        <div class="form-group">
+          <label for="aiModel">Model AI:</label>
+          <select id="aiModel">
+            <option value="gemini-1.5-flash">Gemini 1.5 Flash (Foarte rapid & gratuit)</option>
+            <option value="gemini-2.5-flash">Gemini 2.5 Flash (Calitate excelentă & viteză)</option>
+            <option value="gemini-1.5-pro">Gemini 1.5 Pro (Cel mai bun raționament)</option>
+          </select>
+        </div>
+
+        <button type="submit" class="btn btn-primary">💾 Salvează Setările AI</button>
+      </form>
+    </section>
+
+    <!-- 2. Integrare WordPress -->
+    <section class="admin-section">
+      <h2>🌐 Integrare și Publicare pe WordPress</h2>
+      <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 15px;">
+        Conectează această aplicație direct la site-ul tău de WordPress prin REST API. Știrile vor putea fi trimise automat sau la un singur click.
+      </p>
+
+      <form id="wpSettingsForm">
+        <div class="form-group">
+          <label for="wpUrl">Adresă Site WordPress (URL):</label>
+          <input type="url" id="wpUrl" placeholder="https://site-ul-tau.ro">
+          <small>Include și https:// (ex: https://stiri.domeniultau.ro)</small>
+        </div>
+
+        <div class="form-group">
+          <label for="wpUser">Nume Utilizator WordPress (Admin / Editor):</label>
+          <input type="text" id="wpUser" placeholder="admin">
+        </div>
+
+        <div class="form-group">
+          <label for="wpPass">Parolă de Aplicație WordPress (Application Password):</label>
+          <input type="password" id="wpPass" placeholder="xxxx xxxx xxxx xxxx">
+          <small>
+            ⚠️ <strong>Cum obții această parolă:</strong> În WordPress, mergi la <em>Utilizatori ➔ Profilul tău</em>, derulează până la secțiunea <em>„Parole pentru aplicații”</em>, scrie un nume (ex: „StiriHub”) și apasă <em>„Adăugare parolă nouă de aplicație”</em>. Copiază codul generat aici.
+          </small>
+        </div>
+
+        <div class="form-group" style="display: flex; align-items: center; gap: 10px; margin-top: 20px;">
+          <input type="checkbox" id="autoSyncWp" style="width: auto;">
+          <label for="autoSyncWp" style="margin-bottom: 0; cursor: pointer;">
+            Trimite automat pe WordPress orice știre nouă preluată în viitor
+          </label>
+        </div>
+
+        <div style="display: flex; gap: 12px; margin-top: 20px; flex-wrap: wrap;">
+          <button type="submit" class="btn btn-primary">💾 Salvează Datele WordPress</button>
+          <button type="button" id="testWpBtn" class="btn btn-outline">🔌 Testează Conexiunea</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- 3. Surse RSS -->
+    <section class="admin-section">
+      <h2>📡 Gestionare Surse RSS</h2>
+      <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 15px;">
+        Sursele de știri din care robotul colectează articolele la fiecare 30 de minute.
+      </p>
+
+      <!-- Form adăugare sursă -->
+      <form id="addSourceForm" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)) 120px; gap: 15px; margin-bottom: 25px; align-items: flex-end;">
+        <div class="form-group" style="margin-bottom: 0;">
+          <label>Nume Sursă:</label>
+          <input type="text" id="newSourceName" placeholder="Ex: Economedia" required>
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label>URL Flux RSS:</label>
+          <input type="url" id="newSourceUrl" placeholder="https://economedia.ro/feed" required>
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label>Categorie:</label>
+          <select id="newSourceCategory">
+            <option value="Actualitate">Actualitate</option>
+            <option value="Politică">Politică</option>
+            <option value="Economie">Economie</option>
+            <option value="Tehnologie">Tehnologie</option>
+            <option value="Sport">Sport</option>
+          </select>
+        </div>
+        <button type="submit" class="btn btn-primary" style="height: 42px;">➕ Adaugă</button>
+      </form>
+
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Nume Sursă</th>
+              <th>URL Flux RSS</th>
+              <th>Categorie</th>
+              <th>Status</th>
+              <th>Acțiuni</th>
+            </tr>
+          </thead>
+          <tbody id="sourcesTableBody">
+            <!-- Rândurile vor fi generate dinamic -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <div id="toastContainer"></div>
+
+  <script src="admin.js"></script>
+</body>
+</html>

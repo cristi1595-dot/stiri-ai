@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ȘtiriHub AI | Agregator Inteligent de Știri</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22%20width=%22100%22%20height=%22100%22><text y=%22.9em%22 font-size=%2290%22>📰</text></svg>">
+</head>
+<body>
+
+  <!-- Top Header -->
+  <header class="site-header">
+    <div class="top-bar">
+      <span id="currentDate">Se încarcă data...</span>
+      <span>Agregator Automatizat cu Inteligență Artificială</span>
+    </div>
+    <div class="nav-container">
+      <a href="/" class="logo">
+        Știri<span>Hub</span>
+        <span class="logo-badge">AI Powered</span>
+      </a>
+
+      <div class="header-actions">
+        <div class="search-box">
+          <input type="text" id="searchInput" placeholder="Caută în știri..." autocomplete="off">
+        </div>
+        <button id="quickFetchBtn" class="btn btn-accent" title="Preia știri noi acum din toate sursele">
+          🔄 Preia Știri Noi
+        </button>
+        <a href="admin.html" class="btn btn-outline">
+          ⚙️ Panou Admin
+        </a>
+      </div>
+    </div>
+
+    <!-- Categorii -->
+    <nav class="category-nav" id="categoryNav">
+      <button class="cat-btn active" data-cat="Toate">Toate</button>
+      <button class="cat-btn" data-cat="Actualitate">Actualitate</button>
+      <button class="cat-btn" data-cat="Politică">Politică</button>
+      <button class="cat-btn" data-cat="Economie">Economie</button>
+      <button class="cat-btn" data-cat="Tehnologie">Tehnologie</button>
+      <button class="cat-btn" data-cat="Sport">Sport</button>
+      <button class="cat-btn" data-cat="Sănătate">Sănătate</button>
+    </nav>
+  </header>
+
+  <!-- Main Content -->
+  <main class="container">
+    <div id="loadingStatus" style="display: none; text-align: center; padding: 40px;">
+      <div style="font-size: 2rem; margin-bottom: 10px;">⏳</div>
+      <p style="font-weight: 600; color: var(--text-muted);">Robotul AI preia și reformulează știrile din fluxurile RSS... Te rugăm să aștepți câteva secunde.</p>
+    </div>
+
+    <div class="news-grid" id="newsGrid">
+      <!-- Articolele vor fi încărcate aici dinamic -->
+    </div>
+
+    <div id="emptyState" style="display: none; text-align: center; padding: 60px 20px; background: white; border-radius: var(--radius); border: 1px dashed var(--border);">
+      <div style="font-size: 3rem; margin-bottom: 15px;">📭</div>
+      <h3>Nu am găsit încă articole salvate</h3>
+      <p style="color: var(--text-muted); margin: 10px 0 20px;">Apasă pe butonul de mai jos pentru a declanșa prima preluare de știri românești!</p>
+      <button onclick="document.getElementById('quickFetchBtn').click()" class="btn btn-primary">
+        🚀 Preia primele știri acum
+      </button>
+    </div>
+  </main>
+
+  <!-- Modal Vizualizare Articol Complet -->
+  <div class="modal-overlay" id="articleModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <span id="modalCategory" class="card-badge" style="position: static; display: inline-block; margin-bottom: 8px;"></span>
+          <span id="modalAiBadge" class="ai-rewritten-badge" style="position: static; display: inline-flex;">✨ Sinteză AI</span>
+        </div>
+        <button class="modal-close" id="modalCloseBtn">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <h1 class="modal-title" id="modalTitle"></h1>
+        
+        <div class="modal-meta">
+          <span>📅 <strong id="modalDate"></strong></span>
+          <span>🗞️ Sursă primară: <strong id="modalSourceName"></strong></span>
+          <span id="modalWpStatus"></span>
+        </div>
+
+        <div id="modalImageContainer"></div>
+
+        <div class="modal-content-text" id="modalContent"></div>
+
+        <div class="modal-source-box">
+          <p><strong>Despre această știre:</strong> Conținutul a fost prelucrat și reformulat de inteligența artificială pentru concizie și neutralitate.</p>
+          <p style="margin-top: 6px;">Puteți consulta articolul original pe: <a id="modalOriginalLink" href="#" target="_blank" rel="noopener noreferrer" style="color: var(--primary); font-weight: 600;"></a></p>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-outline" id="modalCloseBottomBtn">Închide</button>
+        <button class="btn btn-primary" id="modalSyncWpBtn">
+          📤 Trimite pe WordPress
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toastContainer"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "name": "stiri-ai-aggregator",
+  "version": "1.0.0",
+  "description": "Agregator inteligent de stiri cu rescriere AI si export catre WordPress",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "rss-parser": "^3.13.0",
+    "node-cron": "^3.0.3"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  }
+}
