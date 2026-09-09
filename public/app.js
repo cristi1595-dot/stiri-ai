@@ -64,7 +64,7 @@ async function loadArticles() {
   const emptyState = document.getElementById('emptyState');
 
   try {
-    let url = `/api/articles?limit=30`;
+    let url = `/api/articles?limit=40`;
     if (currentCategory && currentCategory !== 'Toate') {
       url += `&category=${encodeURIComponent(currentCategory)}`;
     }
@@ -103,15 +103,32 @@ function renderArticleCard(art) {
   const timeAgo = formatTimeAgo(art.published_at || art.created_at);
   const title = escapeHtml(art.ai_title || art.original_title);
   const excerpt = escapeHtml(art.ai_summary || art.original_description || '').slice(0, 160) + '...';
-  const category = escapeHtml(art.category || 'Actualitate');
-  const source = escapeHtml(art.source_name || 'RSS');
+  const category = escapeHtml(art.category || 'Piețe & Burse');
+  const source = escapeHtml(art.source_name || 'Finanțe');
   
+  // Numar de surse combinate
+  let sourcesCount = 1;
+  try {
+    const parsedSources = JSON.parse(art.sources_json || '[]');
+    if (Array.isArray(parsedSources) && parsedSources.length > 0) {
+      sourcesCount = parsedSources.length;
+    }
+  } catch (e) {}
+
+  const multiBadge = sourcesCount > 1 
+    ? `<span style="background: #4f46e5; color: white; padding: 2px 7px; border-radius: 12px; font-size: 0.7rem; font-weight: 700; margin-left: 6px;">✨ ${sourcesCount} Surse</span>` 
+    : '';
+
+  const tickerBadge = art.tickers 
+    ? `<span style="background: #e0e7ff; color: #4338ca; padding: 2px 6px; border-radius: 4px; font-size: 0.72rem; font-weight: 700;">${escapeHtml(art.tickers)}</span>` 
+    : '';
+
   const imgHtml = art.image_url 
     ? `<img src="${art.image_url}" alt="${title}" loading="lazy" onerror="this.style.display='none'">` 
-    : `<div style="height:100%; display:flex; align-items:center; justify-content:center; color:white; font-size:2.5rem; opacity:0.8;">📰</div>`;
+    : `<div style="height:100%; display:flex; align-items:center; justify-content:center; color:white; font-size:2.8rem; background: linear-gradient(135deg, #1e293b, #0f172a);">📈</div>`;
 
   const wpBadge = art.wp_post_id 
-    ? `<span style="color:#059669; font-weight:600;" title="Sincronizat pe WordPress">✅ Pe WP</span>` 
+    ? `<span style="color:#059669; font-weight:600;" title="Publicat pe WordPress">✅ Pe WP</span>` 
     : '';
 
   return `
@@ -119,13 +136,17 @@ function renderArticleCard(art) {
       <div class="card-img-wrapper">
         ${imgHtml}
         <span class="card-badge">${category}</span>
-        <span class="ai-rewritten-badge">✨ AI</span>
+        <span class="ai-rewritten-badge">✨ AI Sinteză</span>
       </div>
       <div class="card-body">
+        <div style="display: flex; gap: 8px; margin-bottom: 8px; align-items: center;">
+          ${tickerBadge}
+          ${multiBadge}
+        </div>
         <h2 class="card-title">${title}</h2>
         <p class="card-excerpt">${excerpt}</p>
         <div class="card-footer">
-          <span class="card-source">${source}</span>
+          <span class="card-source" style="max-width: 60%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${source}</span>
           <div>
             ${wpBadge}
             <span>🕒 ${timeAgo}</span>
@@ -148,9 +169,17 @@ async function openModal(id) {
 
     const art = data.article;
     document.getElementById('modalTitle').textContent = art.ai_title || art.original_title;
-    document.getElementById('modalCategory').textContent = art.category || 'Actualitate';
-    document.getElementById('modalSourceName').textContent = art.source_name || 'RSS';
+    document.getElementById('modalCategory').textContent = art.category || 'Piețe & Burse';
+    document.getElementById('modalSourceName').textContent = art.source_name || 'Finanțe';
     document.getElementById('modalDate').textContent = new Date(art.published_at || art.created_at).toLocaleString('ro-RO');
+
+    const tickerEl = document.getElementById('modalTickers');
+    if (art.tickers) {
+      tickerEl.textContent = 'Tickers: ' + art.tickers;
+      tickerEl.style.display = 'inline-block';
+    } else {
+      tickerEl.style.display = 'none';
+    }
 
     const wpStatus = document.getElementById('modalWpStatus');
     if (art.wp_post_id) {
@@ -166,6 +195,15 @@ async function openModal(id) {
       imgContainer.innerHTML = '';
     }
 
+    // Rezumat Executiv
+    const summaryBox = document.getElementById('modalExecutiveSummary');
+    if (art.ai_summary) {
+      summaryBox.innerHTML = `<strong>💡 Rezumat Executiv:</strong> ${escapeHtml(art.ai_summary)}`;
+      summaryBox.style.display = 'block';
+    } else {
+      summaryBox.style.display = 'none';
+    }
+
     // Paragrafe continut
     const paragraphs = (art.ai_content || art.original_description || '')
       .split(/\n+/)
@@ -173,10 +211,28 @@ async function openModal(id) {
       .join('');
     document.getElementById('modalContent').innerHTML = paragraphs;
 
-    // Link sursa
-    const origLink = document.getElementById('modalOriginalLink');
-    origLink.href = art.original_link;
-    origLink.textContent = art.source_name + ' (vezi articolul)';
+    // Lista surse agregate
+    const sourcesList = document.getElementById('modalSourcesList');
+    let sources = [];
+    try {
+      sources = JSON.parse(art.sources_json || '[]');
+    } catch (e) {}
+
+    if (Array.isArray(sources) && sources.length > 0) {
+      sourcesList.innerHTML = sources.map(s => `
+        <li>
+          <strong>${escapeHtml(s.name)}:</strong> 
+          <a href="${s.link}" target="_blank" rel="noopener noreferrer" style="color: var(--primary);">${escapeHtml(s.title || 'Vezi articolul original')}</a>
+        </li>
+      `).join('');
+    } else {
+      sourcesList.innerHTML = `
+        <li>
+          <strong>${escapeHtml(art.source_name)}:</strong> 
+          <a href="${art.original_link}" target="_blank" rel="noopener noreferrer" style="color: var(--primary);">Articolul original</a>
+        </li>
+      `;
+    }
 
     modal.classList.add('active');
     document.body.style.overflow = 'hidden';
@@ -202,12 +258,15 @@ async function triggerQuickFetch() {
   loading.style.display = 'block';
 
   try {
-    showToast('Colectarea și rescrierea AI au început...', 'info');
+    showToast('Colectarea și sinteza pe piețele financiare au început...', 'info');
     const res = await fetch('/api/fetch-now', { method: 'POST' });
     const data = await res.json();
 
     if (data.success) {
-      showToast(`Succes! Au fost adăugate ${data.result.totalNew} știri noi.`);
+      const multiInfo = data.result.multiSourceSyntheses > 0 
+        ? ` (${data.result.multiSourceSyntheses} sinteze multi-sursă)` 
+        : '';
+      showToast(`Succes! Au fost adăugate ${data.result.totalNew} analize noi${multiInfo}.`);
       await loadArticles();
     } else {
       showToast(data.message || 'Scanarea nu a putut fi efectuată.', 'error');
@@ -216,7 +275,7 @@ async function triggerQuickFetch() {
     showToast('Eroare de conexiune la server.', 'error');
   } finally {
     btn.disabled = false;
-    btn.textContent = '🔄 Preia Știri Noi';
+    btn.textContent = '🔄 Preia & Sintetizează Acum';
     loading.style.display = 'none';
   }
 }
@@ -234,8 +293,8 @@ async function syncToWordPress(articleId) {
 
     if (data.success) {
       showToast('Articolul a fost publicat cu succes pe WordPress!');
-      openModal(articleId); // Reincarca detaliile in modal
-      loadArticles(); // Reincarca lista
+      openModal(articleId);
+      loadArticles();
     } else {
       showToast(data.error || 'Eroare la trimiterea pe WordPress.', 'error');
     }
@@ -247,7 +306,6 @@ async function syncToWordPress(articleId) {
   }
 }
 
-// Formatare data relativa
 function formatTimeAgo(dateStr) {
   const date = new Date(dateStr);
   const now = new Date();
@@ -269,7 +327,6 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-// Toast notificari
 function showToast(message, type = 'success') {
   const container = document.getElementById('toastContainer');
   const toast = document.createElement('div');

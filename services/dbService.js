@@ -10,7 +10,7 @@ function initDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       url TEXT NOT NULL UNIQUE,
-      category TEXT DEFAULT 'General',
+      category TEXT DEFAULT 'Finanțe & Piețe',
       enabled INTEGER DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
@@ -25,12 +25,14 @@ function initDb() {
       ai_title TEXT,
       ai_content TEXT,
       ai_summary TEXT,
-      category TEXT DEFAULT 'Actualitate',
+      category TEXT DEFAULT 'Piețe & Burse',
       image_url TEXT,
       published_at DATETIME,
-      status TEXT DEFAULT 'published', -- 'published', 'draft', 'pending'
+      status TEXT DEFAULT 'published',
       wp_post_id INTEGER,
       wp_synced_at DATETIME,
+      sources_json TEXT, -- Lista surselor multiple JSON [{name, link, title}]
+      tickers TEXT,      -- Tickers bursiere (ex: NVDA, AAPL, FED)
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -40,13 +42,27 @@ function initDb() {
     );
   `);
 
-  // Adauga surse default daca tabela e goala
+  // Migrari daca coloanele noi lipsesc
+  try { db.exec(`ALTER TABLE articles ADD COLUMN sources_json TEXT`); } catch (e) {}
+  try { db.exec(`ALTER TABLE articles ADD COLUMN tickers TEXT`); } catch (e) {}
+
+  // Adaugare surse financiare si stiri de top
   const countSources = db.prepare('SELECT count(*) as count FROM sources').get();
-  if (countSources.count === 0) {
-    const insertSource = db.prepare('INSERT INTO sources (name, url, category) VALUES (?, ?, ?)');
-    insertSource.run('Digi24', 'https://www.digi24.ro/rss', 'Actualitate');
-    insertSource.run('HotNews.ro', 'https://hotnews.ro/feed', 'Politică & Economie');
-    insertSource.run('Știrile ProTV', 'https://stirileprotv.ro/rss', 'Eveniment');
+  if (countSources.count <= 3) {
+    const defaultSources = [
+      ['Yahoo Finance', 'https://finance.yahoo.com/news/rssindex', 'Piețe & Burse'],
+      ['CNBC Finance', 'https://www.cnbc.com/id/10000664/device/rss/rss.html', 'Piețe & Burse'],
+      ['MarketWatch', 'https://feeds.content.dowjones.io/public/rss/mw_topstories', 'Companii & Tech'],
+      ['Investing.com', 'https://www.investing.com/rss/news_25.rss', 'Piețe & Burse'],
+      ['Economedia', 'https://economedia.ro/feed', 'Economie România'],
+      ['Digi24', 'https://www.digi24.ro/rss', 'Actualitate & Politică'],
+      ['HotNews.ro', 'https://hotnews.ro/feed', 'Politică & Economie']
+    ];
+
+    const insertSource = db.prepare('INSERT OR IGNORE INTO sources (name, url, category) VALUES (?, ?, ?)');
+    for (const [name, url, cat] of defaultSources) {
+      insertSource.run(name, url, cat);
+    }
   }
 
   // Setari default
@@ -58,26 +74,24 @@ function initDb() {
     ['wp_url', ''],
     ['wp_username', ''],
     ['wp_app_password', ''],
-    ['auto_sync_wp', '0']
+    ['auto_sync_wp', '0'],
+    ['multi_source_synthesis', '1']
   ];
 
-  const checkSetting = db.prepare('SELECT value FROM settings WHERE key = ?');
   const insertSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
-  
   for (const [key, val] of defaultSettings) {
     insertSetting.run(key, val);
   }
 }
 
-// Articole
 function insertArticle(art) {
   try {
     const stmt = db.prepare(`
       INSERT INTO articles (
         source_name, source_url, original_title, original_link, 
         original_description, ai_title, ai_content, ai_summary, 
-        category, image_url, published_at, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        category, image_url, published_at, status, sources_json, tickers
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     
     const res = stmt.run(
@@ -89,22 +103,29 @@ function insertArticle(art) {
       art.ai_title || art.original_title,
       art.ai_content || art.original_description || '',
       art.ai_summary || '',
-      art.category || 'Actualitate',
+      art.category || 'Piețe & Burse',
       art.image_url || null,
       art.published_at || new Date().toISOString(),
-      art.status || 'published'
+      art.status || 'published',
+      typeof art.sources_json === 'string' ? art.sources_json : JSON.stringify(art.sources_json || []),
+      art.tickers || ''
     );
     return res.lastInsertRowid;
   } catch (err) {
     if (err.message && err.message.includes('UNIQUE constraint failed')) {
-      return null; // Articolul exista deja
+      return null;
     }
     console.error('Eroare la inserare articol:', err.message);
     return null;
   }
 }
 
-function getArticles({ category, search, status, limit = 20, offset = 0 } = {}) {
+function articleExistsByLink(link) {
+  const row = db.prepare('SELECT id FROM articles WHERE original_link = ?').get(link);
+  return !!row;
+}
+
+function getArticles({ category, search, status, limit = 30, offset = 0 } = {}) {
   let query = 'SELECT * FROM articles WHERE 1=1';
   const params = [];
 
@@ -119,9 +140,9 @@ function getArticles({ category, search, status, limit = 20, offset = 0 } = {}) 
   }
 
   if (search) {
-    query += ' AND (ai_title LIKE ? OR ai_content LIKE ? OR original_title LIKE ?)';
+    query += ' AND (ai_title LIKE ? OR ai_content LIKE ? OR original_title LIKE ? OR tickers LIKE ?)';
     const s = `%${search}%`;
-    params.push(s, s, s);
+    params.push(s, s, s, s);
   }
 
   query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
@@ -134,20 +155,27 @@ function getArticleById(id) {
   return db.prepare('SELECT * FROM articles WHERE id = ?').get(id);
 }
 
-function updateArticleAI(id, { ai_title, ai_content, ai_summary, category }) {
+function updateArticleAI(id, { ai_title, ai_content, ai_summary, category, tickers, sources_json }) {
   const stmt = db.prepare(`
     UPDATE articles 
-    SET ai_title = ?, ai_content = ?, ai_summary = ?, category = ?
+    SET ai_title = ?, ai_content = ?, ai_summary = ?, category = ?, tickers = ?, sources_json = ?
     WHERE id = ?
   `);
-  stmt.run(ai_title, ai_content, ai_summary, category, id);
+  stmt.run(
+    ai_title, 
+    ai_content, 
+    ai_summary, 
+    category, 
+    tickers || '', 
+    typeof sources_json === 'string' ? sources_json : JSON.stringify(sources_json || []),
+    id
+  );
 }
 
 function markWpSynced(id, wp_post_id) {
   db.prepare('UPDATE articles SET wp_post_id = ?, wp_synced_at = CURRENT_TIMESTAMP WHERE id = ?').run(wp_post_id, id);
 }
 
-// Surse
 function getSources() {
   return db.prepare('SELECT * FROM sources ORDER BY id ASC').all();
 }
@@ -156,7 +184,7 @@ function getEnabledSources() {
   return db.prepare('SELECT * FROM sources WHERE enabled = 1').all();
 }
 
-function addSource(name, url, category = 'General') {
+function addSource(name, url, category = 'Finanțe & Piețe') {
   const stmt = db.prepare('INSERT INTO sources (name, url, category) VALUES (?, ?, ?)');
   return stmt.run(name, url, category);
 }
@@ -169,7 +197,6 @@ function toggleSource(id, enabled) {
   return db.prepare('UPDATE sources SET enabled = ? WHERE id = ?').run(enabled ? 1 : 0, id);
 }
 
-// Setari
 function getSetting(key, defaultValue = '') {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
   return row ? row.value : defaultValue;
@@ -199,6 +226,7 @@ function getStats() {
 module.exports = {
   initDb,
   insertArticle,
+  articleExistsByLink,
   getArticles,
   getArticleById,
   updateArticleAI,

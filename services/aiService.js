@@ -1,43 +1,63 @@
 const db = require('./dbService');
 
 /**
- * Rescrie si sintetizeaza o stire folosind Gemini AI.
- * Daca nu este setata o cheie API, va folosi modul demo pentru testare imediata.
+ * Rescrie si sintetizeaza o stire (sau un grup de 2-4 stiri din surse diferite pe acelasi subiect)
+ * folosind Google Gemini AI specializat in jurnalism financiar si economic.
  */
-async function rewriteArticleWithAI({ title, content, sourceName, link }) {
+async function synthesizeMultiSourceArticle(cluster) {
   const apiKey = db.getSetting('gemini_api_key', '').trim();
   const model = db.getSetting('ai_model', 'gemini-1.5-flash');
 
-  // Daca nu exista cheie, oferim un raspuns simulat curat
+  const sourcesList = cluster.map(c => ({
+    name: c.sourceName,
+    title: c.title,
+    link: c.link
+  }));
+
+  const primaryItem = cluster[0];
+
+  // Fallback demo daca nu este setata o cheie API
   if (!apiKey) {
+    const isMulti = cluster.length > 1;
+    const titlePrefix = isMulti ? `[Sinteză ${cluster.length} Surse] ` : '';
     return {
-      ai_title: `${title}`,
-      ai_content: cleanHtml(content) || 'Conținut indisponibil pentru această știre.',
-      ai_summary: (cleanHtml(content) || title).slice(0, 150) + '...',
-      category: detectCategory(title + ' ' + content),
+      ai_title: `${titlePrefix}${primaryItem.title}`,
+      ai_content: cluster.map(c => `(${c.sourceName}): ${cleanHtml(c.content)}`).join('\n\n'),
+      ai_summary: cleanHtml(primaryItem.content).slice(0, 160) + '...',
+      category: detectFinancialCategory(primaryItem.title + ' ' + primaryItem.content),
+      tickers: extractPotentialTickers(cluster.map(c => c.title).join(' ')),
+      sources_json: sourcesList,
       is_mock: true
     };
   }
 
+  // Construim materialul sursa pentru AI
+  let sourcesPayloadText = '';
+  cluster.forEach((item, idx) => {
+    sourcesPayloadText += `\n--- SURSA ${idx + 1}: ${item.sourceName} ---\nTITLU: ${item.title}\nTEXT/REZUMAT:\n${cleanHtml(item.content).slice(0, 1800)}\n`;
+  });
+
   const prompt = `
-Ești un jurnalist profesionist și redactor de știri neutru pentru un portal românesc de știri.
-Ai primit următorul material de presă preluat de la sursa "${sourceName}":
+Ești un analist financiar senior și jurnalist de elită pentru o publicație economică de top (în stilul Ziarul Financiar / Financial Times / Bloomberg) în limba română.
 
-TITLU ORIGINAL: ${title}
-TEXT ORIGINAL:
-${cleanHtml(content).slice(0, 2500)}
+Ai primit informații de presă de la ${cluster.length} sursă/surse de încredere:
+${sourcesPayloadText}
 
-SARCINĂ:
-Rescrie această știre complet originală, fluentă, neutră și atractivă în limba română.
-Păstrează doar faptele reale relatate în text (nu inventa date, nume sau declarații).
+SARCINA TA:
+1. Sintetizează toate aceste relatări într-un singur articol complet, fluent, neutru și profesionist în LIMBA ROMÂNĂ.
+2. Dacă sursele raportează cifre concrete (prețuri de acțiuni, procente, cifre de afaceri, decizii ale băncilor centrale), include aceste detalii financiare precise.
+3. Dacă sursele conțin nuanțe sau unghiuri diferite de abordare, unifică-le armonios.
+4. NU inventa date, nume de companii sau cotații care nu sunt susținute de textele primite.
 
-Răspunde STRICT în format JSON valid, fără alte explicații sau blocuri de cod markdown în afara JSON-ului:
+RĂSPUNDE STRICT ÎN FORMAT JSON VALID, fără markdown exterior în afara JSON-ului:
 {
-  "ai_title": "Titlu concis, profesional și captivant",
-  "ai_content": "Articolul reformulat în 2-4 paragrafe clare, separate prin linie nouă",
-  "ai_summary": "Un rezumat de 1-2 propoziții al știrii",
-  "category": "Actualitate" (alege una dintre: Actualitate, Politică, Economie, Tehnologie, Sport, Sănătate, Auto)
+  "ai_title": "Titlu financiar captivant, profesional și clar în română",
+  "ai_summary": "Rezumat executiv de 1-2 fraze esențiale pentru un investitor",
+  "ai_content": "Articolul complet redactat în 3-4 paragrafe structurate, separate prin linie nouă",
+  "category": "Piețe & Burse",
+  "tickers": "Ex: NVDA, AAPL, FED sau BNR"
 }
+* Pentru "category", alege una dintre: Piețe & Burse, Companii & Tech, Macroeconomie, Energie & Materii prime, Politică & Bănci Centrale, Sănătate.
 `;
 
   try {
@@ -47,12 +67,10 @@ Răspunde STRICT în format JSON valid, fără alte explicații sau blocuri de c
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [
-          { parts: [{ text: prompt }] }
-        ],
+        contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {
-          temperature: 0.4,
-          maxOutputTokens: 1000
+          temperature: 0.3,
+          maxOutputTokens: 1200
         }
       })
     });
@@ -60,21 +78,20 @@ Răspunde STRICT în format JSON valid, fără alte explicații sau blocuri de c
     if (!response.ok) {
       const errText = await response.text();
       console.error('Eroare Gemini API:', response.status, errText);
-      // Fallback
       return {
-        ai_title: title,
-        ai_content: cleanHtml(content),
-        ai_summary: title,
-        category: detectCategory(title),
-        is_mock: true,
-        error: `Gemini API a returnat cod ${response.status}`
+        ai_title: primaryItem.title,
+        ai_content: cleanHtml(primaryItem.content),
+        ai_summary: primaryItem.title,
+        category: detectFinancialCategory(primaryItem.title),
+        tickers: extractPotentialTickers(primaryItem.title),
+        sources_json: sourcesList,
+        is_mock: true
       };
     }
 
     const data = await response.json();
     const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
     
-    // Extragem JSON-ul din raspuns
     let cleanedJsonText = rawText.trim();
     if (cleanedJsonText.startsWith('```json')) {
       cleanedJsonText = cleanedJsonText.replace(/^```json/, '').replace(/```$/, '').trim();
@@ -84,21 +101,25 @@ Răspunde STRICT în format JSON valid, fără alte explicații sau blocuri de c
 
     const parsed = JSON.parse(cleanedJsonText);
     return {
-      ai_title: parsed.ai_title || title,
-      ai_content: parsed.ai_content || cleanHtml(content),
+      ai_title: parsed.ai_title || primaryItem.title,
+      ai_content: parsed.ai_content || cleanHtml(primaryItem.content),
       ai_summary: parsed.ai_summary || '',
-      category: parsed.category || 'Actualitate',
+      category: parsed.category || detectFinancialCategory(primaryItem.title),
+      tickers: parsed.tickers || extractPotentialTickers(primaryItem.title),
+      sources_json: sourcesList,
       is_mock: false
     };
+
   } catch (err) {
-    console.error('Eroare procesare AI:', err.message);
+    console.error('Eroare la sinteza AI:', err.message);
     return {
-      ai_title: title,
-      ai_content: cleanHtml(content),
-      ai_summary: title,
-      category: detectCategory(title),
-      is_mock: true,
-      error: err.message
+      ai_title: primaryItem.title,
+      ai_content: cleanHtml(primaryItem.content),
+      ai_summary: primaryItem.title,
+      category: detectFinancialCategory(primaryItem.title),
+      tickers: extractPotentialTickers(primaryItem.title),
+      sources_json: sourcesList,
+      is_mock: true
     };
   }
 }
@@ -115,17 +136,30 @@ function cleanHtml(str) {
     .trim();
 }
 
-function detectCategory(text) {
+function detectFinancialCategory(text) {
   const t = text.toLowerCase();
-  if (t.includes('fotbal') || t.includes('meci') || t.includes('liga') || t.includes('sport') || t.includes('tenis')) return 'Sport';
-  if (t.includes('guvern') || t.includes('parlament') || t.includes('alegeri') || t.includes('ministru') || t.includes('partid')) return 'Politică';
-  if (t.includes('bani') || t.includes('euro') || t.includes('inflație') || t.includes('burs') || t.includes('banca') || t.includes('fiscal')) return 'Economie';
-  if (t.includes('ai') || t.includes('telefon') || t.includes('google') || t.includes('apple') || t.includes('internet') || t.includes('software')) return 'Tehnologie';
-  if (t.includes('spital') || t.includes('medic') || t.includes('sănătate') || t.includes('virus')) return 'Sănătate';
-  return 'Actualitate';
+  if (t.includes('oil') || t.includes('petrol') || t.includes('gaz') || t.includes('energie') || t.includes('nuclear')) return 'Energie & Materii prime';
+  if (t.includes('fed') || t.includes('central bank') || t.includes('banca') || t.includes('doband') || t.includes('inflation') || t.includes('inflatie') || t.includes('bnr') || t.includes('ecb')) return 'Politică & Bănci Centrale';
+  if (t.includes('stock') || t.includes('shares') || t.includes('market') || t.includes('bursa') || t.includes('s&p') || t.includes('nasdaq') || t.includes('dow') || t.includes('wall street')) return 'Piețe & Burse';
+  if (t.includes('ai') || t.includes('tech') || t.includes('nvidia') || t.includes('apple') || t.includes('microsoft') || t.includes('google') || t.includes('tesla') || t.includes('meta')) return 'Companii & Tech';
+  if (t.includes('gdp') || t.includes('pib') || t.includes('tax') || t.includes('deficit') || t.includes('economie')) return 'Macroeconomie';
+  return 'Piețe & Burse';
+}
+
+function extractPotentialTickers(text) {
+  const tickers = [];
+  const matches = text.match(/\b[A-Z]{2,5}\b/g) || [];
+  const commonWords = new Set(['THE', 'AND', 'FOR', 'NEW', 'NOW', 'WHY', 'HOW', 'ALL', 'OUT', 'TOP', 'GET', 'HAS', 'ARE', 'WAS', 'BUT', 'NOT']);
+  for (const m of matches) {
+    if (!commonWords.has(m) && !tickers.includes(m)) {
+      tickers.push(m);
+      if (tickers.length >= 3) break;
+    }
+  }
+  return tickers.join(', ');
 }
 
 module.exports = {
-  rewriteArticleWithAI,
+  synthesizeMultiSourceArticle,
   cleanHtml
 };
