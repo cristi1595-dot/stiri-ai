@@ -155,19 +155,14 @@ body {
   font-size: 0.8rem;
 }
 
-/* Category Navigation */
 .category-nav {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 10px 20px;
+  padding: 12px 20px;
   display: flex;
-  gap: 10px;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.category-nav::-webkit-scrollbar {
-  display: none;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
 }
 
 .cat-btn {

@@ -173,10 +173,18 @@ function cleanHtml(str) {
     .trim();
 }
 
-function detectFinancialCategory(text) {
-  const t = text.toLowerCase();
+function detectFinancialCategory(text, sourceName = '') {
+  const t = (text || '').toLowerCase();
+  const s = (sourceName || '').toLowerCase();
 
-  // Defense & Securitate (Apărare, Războaie, Armată, Companii de armament)
+  const isRomanian = 
+    s.includes('digi24') || s.includes('hotnews') || s.includes('protv') || s.includes('economedia') ||
+    t.includes('românia') || t.includes('romania') || t.includes('bucurești') || t.includes('bucuresti') ||
+    t.includes('ciolacu') || t.includes('ponta') || t.includes('nicusor') || t.includes('pnl') ||
+    t.includes('psd') || t.includes('usr') || t.includes('leul') || t.includes('ron ') ||
+    t.includes('anaf') || t.includes('fcsb') || t.includes('cfr') || t.includes('floresti');
+
+  // 1. Defense & Securitate (Războaie, Armată, Apărare, Armament)
   if (
     t.includes('defense') || t.includes('defence') || t.includes('military') || t.includes('pentagon') ||
     t.includes('weapon') || t.includes('missile') || t.includes('arms ') || t.includes('nato') ||
@@ -186,12 +194,13 @@ function detectFinancialCategory(text) {
     t.includes('armament') || t.includes('rachet') || t.includes('tanc') || t.includes('dronă') ||
     t.includes('drone') || t.includes('ucraina') || t.includes('ukraine') || t.includes('rusia') ||
     t.includes('russia') || t.includes('israel') || t.includes('gaza') || t.includes('iran') ||
-    t.includes('frontul') || t.includes('militar') || t.includes('trupe')
+    t.includes('frontul') || t.includes('militar') || t.includes('trupe') || t.includes('soldat') ||
+    t.includes('dezarmat') || t.includes('combatant')
   ) {
     return 'Defense & Securitate';
   }
 
-  // Health & Pharma (Sănătate, Medicină, Biotech, Companii farmaceutice)
+  // 2. Health & Pharma (Sănătate, Medicină, Spitale, Farmaceutice)
   if (
     t.includes('health') || t.includes('pharma') || t.includes('fda') || t.includes('drug') ||
     t.includes('vaccine') || t.includes('cancer') || t.includes('biotech') || t.includes('hospital') ||
@@ -200,45 +209,38 @@ function detectFinancialCategory(text) {
     t.includes('astrazeneca') || t.includes('roche') || t.includes('novartis') || t.includes('sanofi') ||
     t.includes('sănătate') || t.includes('sanatate') || t.includes('medic') || t.includes('spital') ||
     t.includes('tratament') || t.includes('farmac') || t.includes('virus') || t.includes('vaccin') ||
-    t.includes('boală') || t.includes('boala') || t.includes('pacient')
+    t.includes('boală') || t.includes('boala') || t.includes('pacient') || t.includes('paracetamol')
   ) {
     return 'Health & Pharma';
   }
 
-  // Energie & Petrol
+  // 3. Energie & Petrol
   if (
     t.includes('oil') || t.includes('crude') || t.includes('petrol') || t.includes('brent') ||
     t.includes('gas ') || t.includes('gaze') || t.includes('opec') || t.includes('barrel') ||
     t.includes('baril') || t.includes('chevron') || t.includes('exxon') || t.includes('shell') ||
-    t.includes('bp ') || t.includes('energie') || t.includes('nuclear') || t.includes('gazprom') ||
-    t.includes('omv') || t.includes('electrica') || t.includes('hidroelectrica')
+    t.includes('bp ') || t.includes('gazprom') || t.includes('omv') || t.includes('hidroelectrica') ||
+    (t.includes('energie') && (t.includes('nuclear') || t.includes('facturi') || t.includes('eolian') || t.includes('solar')))
   ) {
     return 'Energie & Petrol';
   }
 
-  // Bănci & Politică
+  // 4. Bănci & Politică Monetară / Bănci Centrale
   if (
-    t.includes('fed ') || t.includes('federal reserve') || t.includes('ecb') || t.includes('bnr') ||
+    t.includes('fed ') || t.includes('federal reserve') || t.includes('ecb') ||
     t.includes('bancă centrală') || t.includes('banca centrala') || t.includes('central bank') ||
-    t.includes('dobând') || t.includes('doband') || t.includes('interest rate') || t.includes('rate cut') ||
-    t.includes('rate hike') || t.includes('powell') || t.includes('lagarde') || t.includes('isarescu') ||
-    t.includes('guvern') || t.includes('parlament') || t.includes('alegeri') || t.includes('ministru') ||
-    t.includes('senat') || t.includes('politica monetara')
+    t.includes('interest rate') || t.includes('rate cut') || t.includes('rate hike') ||
+    t.includes('powell') || t.includes('lagarde') || t.includes('politica monetara')
   ) {
     return 'Bănci & Politică';
   }
 
-  // România
-  if (
-    t.includes('românia') || t.includes('romania') || t.includes('bucurești') || t.includes('bucuresti') ||
-    t.includes('anaf') || t.includes('ciolacu') || t.includes('pnl') || t.includes('psd') ||
-    t.includes('usr') || t.includes('leul') || t.includes('ron ') || t.includes('ministerul finantelor') ||
-    t.includes('bugetul de stat') || t.includes('rectificare bugetara')
-  ) {
+  // 5. Dacă este din sursă românească sau vorbește despre România -> Categoria România!
+  if (isRomanian) {
     return 'România';
   }
 
-  // Companii & Tech
+  // 6. Companii & Tech
   if (
     t.includes('tech') || t.includes('ai ') || t.includes('artificial intelligence') ||
     t.includes('nvidia') || t.includes('apple') || t.includes('microsoft') || t.includes('google') ||
@@ -249,17 +251,17 @@ function detectFinancialCategory(text) {
     return 'Companii & Tech';
   }
 
-  // Macroeconomie
+  // 7. Macroeconomie
   if (
     t.includes('gdp') || t.includes('pib') || t.includes('inflație') || t.includes('inflatie') ||
     t.includes('inflation') || t.includes('cpi') || t.includes('recesiune') || t.includes('recession') ||
     t.includes('deficit') || t.includes('datorie') || t.includes('debt') || t.includes('somaj') ||
-    t.includes('unemployment') || t.includes('tax ') || t.includes('impozit') || t.includes('salariu')
+    t.includes('unemployment')
   ) {
     return 'Macroeconomie';
   }
 
-  // Default: Piețe & Burse
+  // 8. Default pentru piețele financiare globale (Wall Street, acțiuni)
   return 'Piețe & Burse';
 }
 
