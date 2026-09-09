@@ -207,6 +207,16 @@ cron.schedule('*/30 * * * *', async () => {
   }
 });
 
+// ======================== PROTECȚIE CRASH / EXCEPȚII ======================== //
+
+process.on('uncaughtException', (err) => {
+  console.error('[GUARD] Eroare necaptată prevenită:', err.message);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[GUARD] Promisiune respinsă prevenită:', reason);
+});
+
 // ======================== PORNIRE SERVER ======================== //
 
 app.listen(PORT, () => {

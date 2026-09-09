@@ -4,6 +4,7 @@ const ai = require('./aiService');
 const wp = require('./wordpressService');
 
 const parser = new Parser({
+  timeout: 12000,
   customFields: {
     item: [
       ['media:content', 'mediaContent'],
